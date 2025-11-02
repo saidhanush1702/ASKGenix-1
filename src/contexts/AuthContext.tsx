@@ -1,11 +1,11 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { supabase } from "../lib/supabase";
 
 interface User {
   id: string;
   email: string;
   full_name: string;
-  role: 'admin' | 'student';
+  role: "admin" | "student";
 }
 
 interface AuthContextType {
@@ -22,45 +22,73 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // ✅ Check for persisted user in localStorage on mount
   useEffect(() => {
     checkUser();
   }, []);
 
+  async function testFetchUsers() {
+  const { data, error } = await supabase
+    .from("users")
+    .select("email");
+
+  if (error) {
+    console.error("Error fetching users:", error);
+  } else {
+    console.log("All user emails:", data);
+  }
+}
+
+
+
   const checkUser = async () => {
-    const userId = localStorage.getItem('userId');
+    const userId = localStorage.getItem("userId");
     if (userId) {
       const { data, error } = await supabase
-        .from('users')
-        .select('id, email, full_name, role')
-        .eq('id', userId)
+        .from("users")
+        .select("id, email, full_name, role")
+        .eq("id", userId)
         .maybeSingle();
 
       if (data && !error) {
         setUser(data);
       } else {
-        localStorage.removeItem('userId');
+        localStorage.removeItem("userId");
       }
     }
     setLoading(false);
   };
 
+  // ✅ SIGN IN
   const signIn = async (email: string, password: string) => {
     try {
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanPassword = password.trim();
+      
+      console.log(cleanEmail, cleanPassword);
       const { data, error } = await supabase
-        .from('users')
-        .select('id, email, full_name, role, password_hash')
-        .eq('email', email)
+        .from("users")
+        .select("id, email, full_name, role, password_hash")
+        .ilike("email", cleanEmail)
         .maybeSingle();
-
-      if (error || !data) {
-        return { success: false, error: 'Invalid email or password' };
+ 
+      
+      testFetchUsers();
+      if (error) {
+        console.error("Supabase error during signIn:", error);
+        return { success: false, error: "An error occurred during login." };
       }
 
-      if (data.password_hash !== password) {
-        return { success: false, error: 'Invalid email or password' };
+      if (!data) {
+        return { success: false, error: "Invalid email or password." };
       }
 
-      const userData = {
+      // Simple password check (update to bcrypt later)
+      if (data.password_hash !== cleanPassword) {
+        return { success: false, error: "Invalid email or password." };
+      }
+
+      const userData: User = {
         id: data.id,
         email: data.email,
         full_name: data.full_name,
@@ -68,43 +96,51 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
 
       setUser(userData);
-      localStorage.setItem('userId', data.id);
+      localStorage.setItem("userId", data.id);
       return { success: true };
-    } catch (error) {
-      return { success: false, error: 'An error occurred during sign in' };
+    } catch (err) {
+      console.error("Unexpected error during signIn:", err);
+      return { success: false, error: "Unexpected error during login." };
     }
   };
 
+  // ✅ SIGN UP
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanPassword = password.trim();
+
+      // Check if user already exists
       const { data: existingUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', email)
+        .from("users")
+        .select("id")
+        .ilike("email", cleanEmail)
         .maybeSingle();
 
       if (existingUser) {
-        return { success: false, error: 'Email already registered' };
+        return { success: false, error: "Email already registered." };
       }
 
+      // Insert new user
       const { data, error } = await supabase
-        .from('users')
+        .from("users")
         .insert([
           {
-            email,
-            password_hash: password,
+            email: cleanEmail,
+            password_hash: cleanPassword,
             full_name: fullName,
-            role: 'student',
+            role: "student",
           },
         ])
-        .select('id, email, full_name, role')
+        .select("id, email, full_name, role")
         .single();
 
       if (error || !data) {
-        return { success: false, error: 'Failed to create account' };
+        console.error("Supabase insert error:", error);
+        return { success: false, error: "Failed to create account." };
       }
 
-      const userData = {
+      const userData: User = {
         id: data.id,
         email: data.email,
         full_name: data.full_name,
@@ -112,21 +148,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
 
       setUser(userData);
-      localStorage.setItem('userId', data.id);
+      localStorage.setItem("userId", data.id);
       return { success: true };
-    } catch (error) {
-      return { success: false, error: 'An error occurred during sign up' };
+    } catch (err) {
+      console.error("Unexpected error during signUp:", err);
+      return { success: false, error: "Unexpected error during sign up." };
     }
   };
 
+  // ✅ SIGN OUT
   const signOut = async () => {
     setUser(null);
-    localStorage.removeItem('userId');
+    localStorage.removeItem("userId");
   };
 
   return (
     <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
       {children}
+      
     </AuthContext.Provider>
   );
 };
@@ -134,7 +173,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };

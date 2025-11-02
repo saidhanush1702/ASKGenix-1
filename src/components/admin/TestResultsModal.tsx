@@ -49,7 +49,7 @@ export const TestResultsModal = ({ test, onClose }: { test: Test; onClose: () =>
     if (!error && data) {
       const formatted = data.map(item => ({
         ...item,
-        user: Array.isArray(item.users) ? item.users[0] : item.users
+        user: Array.isArray(item.users) ? item.users[0] : item.users,
       }));
       setResults(formatted);
     }
@@ -85,7 +85,7 @@ export const TestResultsModal = ({ test, onClose }: { test: Test; onClose: () =>
       'Score',
       'Total Marks',
       'Percentage',
-      'Time Taken (min)',
+      'Time Taken',
       'Status',
       'Started At',
       'Submitted At',
@@ -97,7 +97,11 @@ export const TestResultsModal = ({ test, onClose }: { test: Test; onClose: () =>
       result.score,
       result.total_marks,
       ((result.score / result.total_marks) * 100).toFixed(2) + '%',
-      result.time_taken_seconds ? Math.round(result.time_taken_seconds / 60) : 'N/A',
+      result.time_taken_seconds
+        ? result.time_taken_seconds < 60
+          ? `${result.time_taken_seconds}s`
+          : `${Math.round(result.time_taken_seconds / 60)} min`
+        : 'N/A',
       result.status,
       new Date(result.started_at).toLocaleString(),
       result.submitted_at ? new Date(result.submitted_at).toLocaleString() : 'N/A',
@@ -119,10 +123,11 @@ export const TestResultsModal = ({ test, onClose }: { test: Test; onClose: () =>
     document.body.removeChild(link);
   };
 
-  const getPercentage = (score: number, total: number) => {
-    return ((score / total) * 100).toFixed(1);
-  };
+  const getPercentage = (score: number, total: number) => ((score / total) * 100).toFixed(1);
 
+  // =====================
+  // Detailed Answers Modal
+  // =====================
   if (selectedAttempt) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -141,6 +146,10 @@ export const TestResultsModal = ({ test, onClose }: { test: Test; onClose: () =>
             <div className="space-y-6">
               {detailedAnswers.map((answer, index) => {
                 const question = answer.questions;
+                const selectedAnswers = answer.selected_answers || [];
+                const correctAnswers = question.correct_answers || [];
+                const options = question.options || [];
+
                 return (
                   <div key={answer.id} className="border border-slate-200 rounded-lg p-4">
                     <div className="flex justify-between items-start mb-3">
@@ -156,43 +165,32 @@ export const TestResultsModal = ({ test, onClose }: { test: Test; onClose: () =>
                       </span>
                     </div>
 
-                    <p className="text-slate-700 mb-3">{question.question_text}</p>
+                    <p className="text-slate-700 mb-4">{question.question_text}</p>
 
+                    {/* All Options Display */}
                     <div className="space-y-2">
-                      {question.options.map((option: any) => {
-                        const isSelected = answer.selected_answers?.includes(option.id);
-                        const isCorrect = question.correct_answers.includes(option.id);
+                      {options.map((opt: any, i: number) => {
+                        const isCorrect = correctAnswers.includes(opt.id);
+                        const isSelected = selectedAnswers.includes(opt.id);
+
+                        let bg = 'bg-slate-50 border-slate-200 text-slate-800';
+                        if (isCorrect && isSelected)
+                          bg = 'bg-green-200 border-green-600 text-green-900';
+                        else if (isCorrect)
+                          bg = 'bg-green-50 border-green-400 text-green-800';
+                        else if (isSelected && !isCorrect)
+                          bg = 'bg-red-200 border-red-500 text-red-900';
 
                         return (
-                          <div
-                            key={option.id}
-                            className={`p-3 rounded-lg border ${
-                              isCorrect
-                                ? 'border-green-300 bg-green-50'
-                                : isSelected
-                                ? 'border-red-300 bg-red-50'
-                                : 'border-slate-200'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`font-medium ${
-                                  isCorrect
-                                    ? 'text-green-700'
-                                    : isSelected
-                                    ? 'text-red-700'
-                                    : 'text-slate-700'
-                                }`}
-                              >
-                                {option.text}
-                              </span>
-                              {isSelected && (
-                                <span className="text-xs text-slate-600">(Selected)</span>
-                              )}
-                              {isCorrect && (
-                                <span className="text-xs text-green-600">(Correct)</span>
-                              )}
-                            </div>
+                          <div key={i} className={`border rounded-md p-2 text-sm ${bg}`}>
+                            <span className="font-medium">{String.fromCharCode(65 + i)}.</span>{' '}
+                            {opt.text}
+                            {isCorrect && (
+                              <span className="ml-2 text-green-700 font-semibold">(Correct Answer)</span>
+                            )}
+                            {isSelected && !isCorrect && (
+                              <span className="ml-2 text-red-700 font-semibold">(Your Answer)</span>
+                            )}
                           </div>
                         );
                       })}
@@ -216,6 +214,9 @@ export const TestResultsModal = ({ test, onClose }: { test: Test; onClose: () =>
     );
   }
 
+  // =====================
+  // Main Results Table
+  // =====================
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
@@ -287,7 +288,9 @@ export const TestResultsModal = ({ test, onClose }: { test: Test; onClose: () =>
                       </td>
                       <td className="py-3 px-4 text-center text-slate-600">
                         {result.time_taken_seconds
-                          ? `${Math.round(result.time_taken_seconds / 60)} min`
+                          ? result.time_taken_seconds < 60
+                            ? `${result.time_taken_seconds}s`
+                            : `${Math.round(result.time_taken_seconds / 60)} min`
                           : 'N/A'}
                       </td>
                       <td className="py-3 px-4 text-center">
